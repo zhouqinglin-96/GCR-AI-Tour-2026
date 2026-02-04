@@ -291,6 +291,10 @@ class DeclarativeWorkflowRunner:
         kind = str(action.get("kind"))
         action_id = str(action.get("id"))
 
+        # Print progress for visibility
+        if kind not in ("SetTextVariable", "SetVariable"):
+            print(f"[workflow] Executing: {action_id} ({kind})", flush=True)
+
         match kind:
             case "SendActivity":
                 activity = action.get("activity")

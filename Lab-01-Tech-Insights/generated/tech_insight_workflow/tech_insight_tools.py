@@ -245,8 +245,11 @@ def tech_fetch_all_to_disk(
         "User-Agent": "GCR-AI-Tour-2026/tech_insight_workflow (+https://github.com)"
     }
 
+    total = len(sources)
+    print(f"[tech.fetch_all_to_disk] Fetching {total} sources (timeout={timeout_seconds}s)...", flush=True)
+
     with httpx.Client(timeout=timeout_seconds, headers=headers, follow_redirects=True) as client:
-        for s in sources:
+        for idx, s in enumerate(sources, start=1):
             if not isinstance(s, dict):
                 continue
             url = str(s.get("url") or "").strip()
@@ -272,6 +275,8 @@ def tech_fetch_all_to_disk(
                 "fetched_at": _to_iso(_utc_now()),
             }
 
+            print(f"  [{idx}/{total}] {platform} ({source_type})...", end=" ", flush=True)
+            start_time = time.time()
             try:
                 r = client.get(url)
                 item["status_code"] = int(r.status_code)
@@ -281,8 +286,13 @@ def tech_fetch_all_to_disk(
                 raw_path.write_text(text, encoding="utf-8")
                 meta_path.write_text(json.dumps(s, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
                 item["ok"] = 200 <= int(r.status_code) < 400
+                elapsed = time.time() - start_time
+                print(f"OK ({r.status_code}, {len(text)} chars, {elapsed:.1f}s)", flush=True)
             except Exception as exc:
+                elapsed = time.time() - start_time
                 item["error"] = str(exc)
+                err_msg = str(exc)[:60]
+                print(f"FAIL ({err_msg}, {elapsed:.1f}s)", flush=True)
                 try:
                     raw_path.write_text(f"ERROR: {exc}\nURL: {url}\n", encoding="utf-8")
                 except Exception:
@@ -296,6 +306,7 @@ def tech_fetch_all_to_disk(
             time.sleep(0.05)
 
     ok_count = sum(1 for x in results if x.get("ok"))
+    print(f"[tech.fetch_all_to_disk] Done: {ok_count}/{len(results)} sources fetched successfully.", flush=True)
     return {
         "source_list_path": source_list_path,
         "output_dir": str(out_dir),

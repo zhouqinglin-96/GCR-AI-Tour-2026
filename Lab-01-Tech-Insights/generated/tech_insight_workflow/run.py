@@ -267,9 +267,13 @@ class AzureAIFoundryAgentInvoker(AgentInvoker):
             raise AttributeError("Agent handle has no runnable method (run/invoke) and is not a context manager")
 
         async def _call() -> str:
+            if self._verbose:
+                print(f"[AzureAI] Starting invoke for agent '{agent_name}'...", flush=True)
             async with DefaultAzureCredential(exclude_interactive_browser_credential=False) as credential:
                 result_text: str | None = None
                 try:
+                    if self._verbose:
+                        print(f"[AzureAI] Creating AzureAIAgentClient...", flush=True)
                     async with AzureAIAgentClient(
                         project_endpoint=self._project_endpoint,
                         model_deployment_name=(self._model_deployment_name or None),
@@ -278,6 +282,8 @@ class AzureAIFoundryAgentInvoker(AgentInvoker):
                         connection_timeout=30,
                         read_timeout=1200,
                     ) as client:
+                        if self._verbose:
+                            print(f"[AzureAI] Resolving agent id for '{agent_name}'...", flush=True)
                         resolved_id = self._resolve_agent_id(agent_name)
 
                         instructions = (
@@ -488,12 +494,14 @@ class LocalSharedToolsInvoker(AgentInvoker):
         return str(value)
 
     def _invoke_tool(self, tool_name: str, args: dict[str, Any] | None) -> str:
+        print(f"[LocalTool] Invoking tool: {tool_name}", flush=True)
         registry = self._get_registry_module()
         call_tool = getattr(registry, "call_tool", None)
         if not callable(call_tool):
             raise RuntimeError("Registry module missing call_tool")
         # Ensure workflow-specific tools (e.g. social_insight_tools.py) are discoverable.
         result = call_tool(tool_name, args, workflow_tools_dir=Path(__file__).resolve().parent)
+        print(f"[LocalTool] Tool {tool_name} completed.", flush=True)
         return self._render_result(result)
 
     def _handle_tool_executor(self, prompt: str) -> str:
