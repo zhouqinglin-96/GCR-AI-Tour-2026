@@ -20,17 +20,45 @@ async function fetchText(path) {
   return await res.text();
 }
 
-function renderMarkdown(markdown) {
-  // marked is loaded via CDN and attached to window
-  const html = window.marked.parse(markdown, {
+async function getMarked() {
+  // Prefer global UMD build if present
+  if (globalThis.marked && typeof globalThis.marked.parse === "function") {
+    return globalThis.marked;
+  }
+
+  throw new Error(
+    "Markdown 解析器 marked 未加载（请检查 index.html 是否成功加载 ./vendor/marked.min.js）。"
+  );
+}
+
+function parseMarkdown(markedLib, markdown) {
+  const options = {
     gfm: true,
     breaks: true,
     headerIds: true,
     mangle: false,
-  });
+  };
 
-  // DOMPurify is loaded via CDN and attached to window
-  const clean = window.DOMPurify.sanitize(html, {
+  if (markedLib && typeof markedLib.parse === "function") {
+    return markedLib.parse(markdown, options);
+  }
+  if (typeof markedLib === "function") {
+    return markedLib(markdown, options);
+  }
+
+  throw new Error("marked 已加载但未暴露 parse()。");
+}
+
+async function renderMarkdown(markdown) {
+  const markedLib = await getMarked();
+  const html = parseMarkdown(markedLib, markdown);
+
+  const purifier = globalThis.DOMPurify;
+  if (!purifier || typeof purifier.sanitize !== "function") {
+    throw new Error("HTML 清洗器 DOMPurify 未加载。");
+  }
+
+  const clean = purifier.sanitize(html, {
     USE_PROFILES: { html: true },
   });
 
@@ -43,7 +71,7 @@ async function loadReport(reportPath) {
 
   try {
     const markdown = await fetchText(reportPath);
-    renderMarkdown(markdown);
+    await renderMarkdown(markdown);
     setStatus(`已加载：${reportPath}`);
   } catch (err) {
     console.error(err);

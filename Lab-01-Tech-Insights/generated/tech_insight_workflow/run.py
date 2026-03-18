@@ -411,6 +411,75 @@ def _find_repo_root(start: Path) -> Path:
 
 
 def _extract_json_object(text: str) -> dict[str, Any]:
+    def _repair_json_backslashes_in_strings(s: str) -> str:
+        r"""Repair invalid JSON escapes caused by raw Windows paths.
+
+        LLMs often emit Windows paths like "D:\foo\bar" without escaping backslashes.
+        That produces JSONDecodeError: Invalid \escape.
+
+        This function walks the JSON text and, *only within JSON string literals*,
+        turns a single backslash into a double backslash unless it's part of one
+        of the structural escapes that should remain (\", \\, \\uXXXX).
+
+        Note: We intentionally also treat \n/\t/\r/etc as literal backslashes in this
+        repair path, because tool-call JSON rarely intends actual newlines/tabs and
+        Windows paths commonly contain sequences like "\new".
+        """
+
+        out: list[str] = []
+        in_string = False
+        i = 0
+        while i < len(s):
+            ch = s[i]
+
+            if ch == '"':
+                # Toggle string state unless it's an escaped quote.
+                # In JSON, an escaped quote inside a string is written as \".
+                if in_string:
+                    # Count preceding backslashes
+                    bs = 0
+                    j = i - 1
+                    while j >= 0 and s[j] == "\\":
+                        bs += 1
+                        j -= 1
+                    if bs % 2 == 0:
+                        in_string = False
+                else:
+                    in_string = True
+                out.append(ch)
+                i += 1
+                continue
+
+            if in_string and ch == "\\":
+                nxt = s[i + 1] if i + 1 < len(s) else ""
+
+                # Preserve the essential escapes that are likely intentional / structural
+                if nxt in ('"', "\\", "/"):
+                    out.append(ch)
+                    if nxt:
+                        out.append(nxt)
+                    i += 2
+                    continue
+
+                if nxt == "u":
+                    hex_part = s[i + 2 : i + 6]
+                    if len(hex_part) == 4 and all(c in "0123456789abcdefABCDEF" for c in hex_part):
+                        out.append(ch)
+                        out.append("u")
+                        out.append(hex_part)
+                        i += 6
+                        continue
+
+                # Anything else: treat the backslash as a literal path separator
+                out.append("\\\\")
+                i += 1
+                continue
+
+            out.append(ch)
+            i += 1
+
+        return "".join(out)
+
     # Robust extraction: handle optional ```json fences and leading/trailing chatter.
     t = (text or "").strip()
     t = re.sub(r"^```(?:json)?\s*", "", t, flags=re.IGNORECASE)
@@ -422,7 +491,12 @@ def _extract_json_object(text: str) -> dict[str, Any]:
         raise ValueError("No JSON object found in script")
 
     candidate = t[start : end + 1]
-    return json.loads(candidate)
+
+    try:
+        return json.loads(candidate)
+    except json.JSONDecodeError:
+        repaired = _repair_json_backslashes_in_strings(candidate)
+        return json.loads(repaired)
 
 
 def _parse_tts_prompt(prompt: str) -> tuple[dict[str, Any], str | None]:
@@ -792,6 +866,12 @@ def main() -> int:
         if not args.azure_ai_project_endpoint:
             raise ValueError(
                 "Azure AI mode requires --azure-ai-project-endpoint (or env AZURE_AI_PROJECT_ENDPOINT / AZURE_EXISTING_AIPROJECT_ENDPOINT)"
+            )
+        if isinstance(args.azure_ai_project_endpoint, str) and "<your-" in args.azure_ai_project_endpoint:
+            raise ValueError(
+                "AZURE_AI_PROJECT_ENDPOINT 看起来仍是模板占位符（包含 '<your-...'）。"
+                "请在 Lab-01-Tech-Insights/.env 中填入真实的 Foundry Project endpoint，"
+                "或在命令行传入 --azure-ai-project-endpoint。"
             )
         if not args.azure_ai_model_deployment_name:
             raise ValueError(
