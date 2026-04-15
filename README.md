@@ -3,7 +3,7 @@
 本仓库包含多个可运行 Lab，当前主要内容如下：
 
 - `Lab-01-Tech-Insights/`：基于新闻源的技术动态聚合与洞察 Lab
-- `Lab-02-Podcast/`：基于 Azure AI 与 GitHub Actions 的自动化播客生成 Lab
+- `Lab-02-Podcast/`：基于 GitHub Copilot 与 Microsoft Agent Framework 的自动化播客生成 Lab
 - `Lab-03-GitHub-Copilot/`：围绕 GitHub Copilot 与 Copilot SDK 的 PPT 生成 Lab
 
 ## Lab-01-Tech-Insights（你将做什么）
@@ -31,10 +31,10 @@ gh workflow run tech-insight
 
 ## Lab-02-Podcast（你将做什么）
 
-这是一个基于 Azure AI 与 GitHub Actions 的「自动化播客生成」Lab：通过智能 Agent 工作流，将话题列表自动转换为播客内容，并每日定时触发、提交结果。
+这是一个基于 GitHub Copilot 与 Microsoft Agent Framework (MAF) 的「自动化播客生成」Lab：通过 MAF Workflow 编排多个 Agent，将话题列表自动转换为播客内容，并每日定时触发、提交结果。
 
 你将体验：
-- 使用 Azure AI Projects 与 Agent Workflow 生成自然的播客对话内容
+- 使用 GitHub Copilot 作为 LLM 提供方，结合 MAF Workflow 编排三个 Agent 串联生成播客对话内容
 - 通过 GitHub Actions 实现每日自动调度与内容发布
 - 管理话题队列（`topic/title.txt`），系统每次处理一个话题
 
@@ -47,9 +47,25 @@ gh workflow run tech-insight
 
 ```bash
 cd Lab-02-Podcast
-pip install -r requirements.txt
+pip install -r requirements.txt --pre
 python podcast_workflow.py -t "你的播客话题"
 ```
+
+### 通过 GitHub Actions 触发
+
+如果你希望通过 GitHub Actions 自动运行播客生成工作流，请按以下步骤操作：
+
+1. **Fork 本仓库**到你自己的 GitHub 账号下
+2. **创建 Fine-grained Personal Access Token**：
+   - 前往 [GitHub Personal Access Tokens](https://github.com/settings/personal-access-tokens) 页面
+   - 点击 **Generate new token**，选择 **Fine-grained personal access tokens**
+   - 在权限设置中，添加 **Copilot** → **Copilot requests** 权限（Read and Write）
+   - 生成并复制 Token
+3. **添加 Repository Secret**：
+   - 进入你 Fork 后的仓库，打开 **Settings** → **Secrets and variables** → **Actions**
+   - 点击 **New repository secret**
+   - Name 填写 `COPILOT_GITHUB_TOKEN`，Value 粘贴上一步生成的 Token
+4. 在 **Actions** 页面手动触发 `Daily Podcast Generator` 工作流，或等待每日定时调度
 
 ## Lab-03-GitHub-Copilot（你将做什么）
 
